@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: agente-inaricards-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - agente_net
+
+networks:
+  agente_net:
+    driver: bridge

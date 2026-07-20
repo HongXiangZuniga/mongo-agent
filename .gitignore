@@ -1,0 +1,29 @@
+# Binaries
+/api
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Environment files (never commit real credentials)
+.env
+*.env
+!.env.example
+
+# Dependency directories
+vendor/
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store

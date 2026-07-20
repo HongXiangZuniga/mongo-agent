@@ -13,6 +13,20 @@
 
 ## Que es esto
 
+El objetivo de este repositorio es documentar y demostrar mi proceso de
+desarrollo actual: especificar cada feature con
+[OpenSpec](https://github.com/Fission-AI/OpenSpec) — propuesta, arquitectura,
+requisitos con escenarios verificables y un plan de tareas con criterios de
+"listo" ejecutables por comando — *antes* de escribir código, y usar esa
+especificación (no un prompt suelto) para dirigir la implementación asistida
+por IA. Yo diseño la arquitectura, tomo las decisiones técnicas y defino los
+criterios de aceptación; el código se genera contra ese contrato y cada
+resultado se valida con tests automatizados, no a ojo. Este repositorio es
+evidencia de ese proceso completo — incluyendo el hardening de seguridad
+explícito para un agente que expone un LLM con tool-calling a usuarios
+externos — no solo del binario final.
+Todo esto bajo el agentes y subagentes, encargados de objetivos sencillos y acotados.
+
 `mongo-agent` recibe preguntas en español por HTTP o por una interfaz
 web de chat, **descubre por sí mismo el esquema de una base MongoDB** (sin un
 modelo de colecciones hardcodeado) y responde consultándola en tiempo real —
@@ -22,11 +36,6 @@ LLM (OpenCode Zen): el modelo decide qué herramientas de solo lectura invocar
 antes de contestar, y el agente mantiene memoria de conversación por sesión en
 Redis.
 
-El objetivo de este repositorio no es solo "que funcione": es demostrar un
-proceso de ingeniería completo — desarrollo *spec-first* con
-[OpenSpec](https://github.com/Fission-AI/OpenSpec), arquitectura hexagonal
-verificable con tests, y hardening de seguridad explícito para un agente que
-expone un LLM con tool-calling a usuarios externos.
 
 ### Lo que demuestra este proyecto
 
@@ -52,10 +61,12 @@ expone un LLM con tool-calling a usuarios externos.
   servida como HTML+htmx desde el mismo binario Go — sin Node.js, sin
   bundler, sin JavaScript framework. Ver
   [Interfaz web de chat](#interfaz-web-de-chat).
-- **Desarrollo spec-first con OpenSpec**: cada feature
-  (`openspec/changes/*/proposal.md`, `design.md`, `spec.md`, `tasks.md`) está
-  documentada y validada *antes* de escribir código, con criterios de "listo"
-  verificables por comando. Ver [Créditos y alcance](#creditos-y-alcance).
+- **Proceso spec-first para dirigir desarrollo asistido por IA**: cada
+  feature (`openspec/changes/*/proposal.md`, `design.md`, `spec.md`,
+  `tasks.md`) está diseñada y documentada por mí *antes* de escribir código,
+  con criterios de "listo" verificables por comando — esa especificación,
+  no un prompt suelto, es lo que guía la implementación. Ver
+  [Créditos y alcance](#creditos-y-alcance).
 - **Testing en las tres capas**: unitarios con fakes en dominio/aplicación,
   tests HTTP con `httptest`, e integración contra MongoDB/Redis/LLM reales.
   Ver [Tests](#tests).

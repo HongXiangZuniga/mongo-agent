@@ -1,0 +1,8 @@
+{{define "tab_bar_items"}}
+<div id="tab-bar-scroll">
+{{range .}}
+<button hx-get="/web/tabs/{{.SessionID}}" hx-target="#chat-panel-container" hx-swap="innerHTML swap:120ms" class="{{if .Active}}tab-active{{end}}">{{.Title}}</button>
+{{end}}
+</div>
+<button hx-post="/web/tabs" hx-target="#chat-panel-container" hx-swap="innerHTML swap:120ms" class="btn-secondary tab-new" aria-label="Nueva pestaña">+</button>
+{{end}}

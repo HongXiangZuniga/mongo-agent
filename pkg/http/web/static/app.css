@@ -1,0 +1,365 @@
+:root {
+  /* Colores: fondo / superficies */
+  --color-bg:            #0F172A;
+  --color-surface:       #1A2436;
+  --color-surface-2:     #1E293B;
+  --color-surface-user:  #16321F;
+
+  /* Colores: bordes */
+  --color-border:        #5B6B85;
+  --color-border-subtle: #334155;
+
+  /* Colores: texto */
+  --color-text:           #F1F5F9;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted:     #64748B;
+
+  /* Colores: acento */
+  --color-accent:         #22C55E;
+  --color-accent-strong:  #16A34A;
+  --color-on-accent:      #0B1220;
+
+  /* Colores: estado de error */
+  --color-danger:         #F87171;
+  --color-danger-bg:      #3A1518;
+  --color-danger-border:  #7F2A2E;
+
+  /* Tipografia */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-size-sm:   0.8125rem;
+  --font-size-base: 1rem;
+  --font-size-lg:   1.25rem;
+  --line-height-tight: 1.3;
+  --line-height-body:  1.5;
+
+  /* Espaciado */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/web/static/fonts/inter-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/web/static/fonts/inter-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-body);
+  margin: 0;
+  height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+body.login-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Contenedor del chat: centrado y acotado en pantallas grandes */
+#chat-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 52rem;
+  height: 100vh;
+  margin: 0 auto;
+  border-left: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+#chat-panel-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+#tab-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) 0;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+#tab-bar-scroll {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+#tab-bar .tab-new {
+  flex-shrink: 0;
+}
+#tab-bar button {
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  font-weight: 400;
+  padding: 0.625rem var(--space-4);
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 0.375rem 0.375rem 0 0;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+#tab-bar button:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+#tab-bar button.tab-active {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-weight: 600;
+  border-top: 2px solid var(--color-accent);
+}
+#tab-bar button.btn-secondary {
+  color: var(--color-accent);
+}
+
+#chat-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+  overflow-y: auto;
+  background: var(--color-bg);
+}
+.msg {
+  max-width: 80%;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  border-radius: 0.75rem;
+  line-height: var(--line-height-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.msg-user {
+  align-self: flex-end;
+  background: var(--color-surface-user);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: var(--color-text);
+}
+.msg-assistant {
+  align-self: flex-start;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-text);
+}
+.msg-user::before,
+.msg-assistant::before {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-1);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.msg-user::before { content: "Tú"; text-align: right; }
+.msg-assistant::before { content: "Agente"; }
+
+.chat-empty-state {
+  margin: var(--space-6) auto;
+  max-width: 28rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+#message-form {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+.login-box form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+input[type="text"],
+input[type="password"] {
+  flex: 1;
+  padding: 0.625rem var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+}
+input[type="text"]::placeholder,
+input[type="password"]::placeholder {
+  color: var(--color-text-muted);
+}
+
+button {
+  padding: 0.625rem var(--space-4);
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  background: transparent;
+  color: var(--color-text);
+}
+.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+}
+.btn-secondary:hover {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+/* Botón "Cerrar pestaña": acción secundaria discreta, nunca a ancho completo */
+#chat-panel > .btn-secondary {
+  align-self: flex-end;
+  margin-top: var(--space-2);
+}
+
+.login-box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 0.5rem;
+  padding: var(--space-6);
+  width: 100%;
+  max-width: 24rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.login-box h1 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+.login-box label {
+  display: block;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+.login-box .btn-primary {
+  width: 100%;
+}
+
+.error {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: 0.375rem;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.htmx-swapping {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .htmx-swapping { transition: none; }
+}
+
+/* Indicador de "Agente escribiendo..." durante la petición htmx */
+#typing-indicator {
+  display: none;
+}
+#typing-indicator.htmx-request {
+  display: block;
+}
+.typing-dots {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
+}
+.typing-dots span {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-0.25rem); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing-dots span { animation: none; }
+}
+
+/* Estado "enviando": el formulario queda inerte mientras htmx espera respuesta */
+#message-form.htmx-request input,
+#message-form.htmx-request .btn-primary {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Tablas Markdown renderizadas dentro de mensajes */
+.md-table {
+  border-collapse: collapse;
+  margin: var(--space-2) 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-tight);
+  max-width: 100%;
+}
+.md-table th,
+.md-table td {
+  border: 1px solid var(--color-border-subtle);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
+.md-table th {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+.md-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03);
+}

@@ -1,0 +1,61 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>agente-inaricards · chat</title>
+  <link rel="stylesheet" href="/web/static/app.css">
+  <script src="/web/static/htmx.min.js"></script>
+</head>
+<body>
+  <main id="chat-shell">
+    <div id="tab-bar-container">{{template "tab_bar" .Tabs}}</div>
+    <div id="chat-panel-container">{{template "chat_panel" .ActiveTab}}</div>
+  </main>
+  <script>
+    (function () {
+      function scrollChatToBottom() {
+        var panel = document.getElementById("chat-panel");
+        if (panel) {
+          panel.scrollTop = panel.scrollHeight;
+        }
+      }
+      document.addEventListener("DOMContentLoaded", scrollChatToBottom);
+      document.body.addEventListener("htmx:afterSwap", function (evt) {
+        if (evt.detail.target && evt.detail.target.id === "chat-panel-container") {
+          scrollChatToBottom();
+        }
+      });
+      document.body.addEventListener("htmx:beforeRequest", function (evt) {
+        var form = evt.detail.elt;
+        if (!form || form.id !== "message-form") {
+          return;
+        }
+        if (form.classList.contains("htmx-request")) {
+          evt.preventDefault();
+          return;
+        }
+        var input = form.querySelector('input[name="message"]');
+        var text = input.value.trim();
+        if (text === "") {
+          return;
+        }
+        var panel = document.getElementById("chat-panel");
+        var indicator = document.getElementById("typing-indicator");
+        var errorBox = panel.querySelector(".error");
+        if (errorBox) {
+          errorBox.remove();
+        }
+        var bubble = document.createElement("div");
+        bubble.className = "msg msg-user";
+        bubble.textContent = text;
+        panel.insertBefore(bubble, indicator);
+        input.value = "";
+        scrollChatToBottom();
+      });
+    })();
+  </script>
+</body>
+</html>
+{{end}}

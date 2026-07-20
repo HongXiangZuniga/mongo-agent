@@ -1,0 +1,15 @@
+{{define "chat_panel"}}
+<div id="chat-panel">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  {{if .EmptyStateHint}}<p class="chat-empty-state">{{.EmptyStateHint}}</p>{{end}}
+  {{range .Messages}}
+  <div class="msg msg-{{.Role}}">{{range .Segments}}{{if eq .Kind "table"}}<table class="md-table"><thead><tr>{{range .Header}}<th>{{.}}</th>{{end}}</tr></thead><tbody>{{range .Rows}}<tr>{{range .}}<td>{{.}}</td>{{end}}</tr>{{end}}</tbody></table>{{else}}{{.Text}}{{end}}{{end}}</div>
+  {{end}}
+  <div id="typing-indicator" class="msg msg-assistant" aria-live="polite"><span class="typing-dots"><span></span><span></span><span></span></span></div>
+  <form id="message-form" hx-post="/web/tabs/{{.SessionID}}/messages" hx-target="#chat-panel-container" hx-swap="innerHTML swap:120ms" hx-indicator="#typing-indicator">
+    <input type="text" name="message" required aria-label="Mensaje" autocomplete="off">
+    <button type="submit" class="btn-primary">Enviar</button>
+  </form>
+  <button hx-delete="/web/tabs/{{.SessionID}}" hx-target="#chat-panel-container" hx-swap="innerHTML swap:120ms" class="btn-secondary">Cerrar pestaña</button>
+</div>
+{{end}}

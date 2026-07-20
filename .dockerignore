@@ -1,0 +1,14 @@
+.git
+.env
+*.env
+!.env.example
+openspec/
+test/
+.idea/
+.vscode/
+.DS_Store
+docker-compose.yml
+Makefile
+README.md
+api
+*.exe

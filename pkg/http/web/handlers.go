@@ -148,7 +148,8 @@ func (p *webPort) NewTab(c *gin.Context) {
 	renderFragmentPair(c, panel, tabs)
 }
 
-// SwitchTab cambia a una pestaña existente y devuelve solo el panel.
+// SwitchTab cambia a una pestaña existente y devuelve el panel junto con la
+// barra de pestañas actualizada (para reflejar cuál queda activa).
 func (p *webPort) SwitchTab(c *gin.Context) {
 	sessionID := c.Param("sessionId")
 	if !utils.IsValidSessionID(sessionID) {
@@ -156,8 +157,14 @@ func (p *webPort) SwitchTab(c *gin.Context) {
 		return
 	}
 
-	messages, _ := p.agentService.GetConversation(c.Request.Context(), sessionID)
-	renderChatPanel(c, p.chatPanel(c.Request.Context(), sessionID, messages, ""))
+	ctx := c.Request.Context()
+	messages, _ := p.agentService.GetConversation(ctx, sessionID)
+	sessions, _ := p.agentService.ListSessions(ctx)
+	renderFragmentPair(
+		c,
+		p.chatPanel(ctx, sessionID, messages, ""),
+		toTabViewModels(sessions, sessionID),
+	)
 }
 
 // SendMessage envía un mensaje al agente y actualiza panel + barra.

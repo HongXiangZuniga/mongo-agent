@@ -363,3 +363,13 @@ button {
 .md-table tbody tr:nth-child(even) {
   background: rgba(255, 255, 255, 0.03);
 }
+
+/* Adjunto CSV descargable dentro de un mensaje */
+.csv-attachment {
+  margin: var(--space-2) 0;
+}
+.csv-download {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}

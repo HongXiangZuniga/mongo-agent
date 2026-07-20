@@ -93,17 +93,17 @@ func TestSecretScrubber_NilScrubberIsNoop(t *testing.T) {
 }
 
 func TestRedactMongoCredentials_RedactsStandardURI(t *testing.T) {
-	input := "failed to connect: mongodb+srv://dbuser:S3cr3t@cluster0.abcde.mongodb.net/?retryWrites=false"
+	input := "failed to connect: mongodb+srv://FAKEUSER:FAKEPASSWORD@example-cluster.test/?retryWrites=false"
 	result := utils.RedactMongoCredentials(input)
-	assert.NotContains(t, result, "dbuser")
-	assert.NotContains(t, result, "S3cr3t")
-	assert.Contains(t, result, "mongodb+srv://[REDACTED]:[REDACTED]@cluster0.abcde.mongodb.net")
+	assert.NotContains(t, result, "FAKEUSER")
+	assert.NotContains(t, result, "FAKEPASSWORD")
+	assert.Contains(t, result, "mongodb+srv://[REDACTED]:[REDACTED]@example-cluster.test")
 }
 
 func TestRedactMongoCredentials_RedactsGenericSchemeURI(t *testing.T) {
-	input := "connecting to redis://user:pw@host:6379"
+	input := "connecting to redis://FAKEUSER:FAKEPW@host:6379"
 	result := utils.RedactMongoCredentials(input)
-	assert.NotContains(t, result, "user:pw")
+	assert.NotContains(t, result, "FAKEUSER:FAKEPW")
 }
 
 func TestRedactMongoCredentials_LeavesTextWithoutURIUnchanged(t *testing.T) {
@@ -112,10 +112,10 @@ func TestRedactMongoCredentials_LeavesTextWithoutURIUnchanged(t *testing.T) {
 }
 
 func TestRedactMongoCredentials_RedactsEvenWithoutExactURIMatch(t *testing.T) {
-	input := "server selection error: mongodb://otheruser:otherpass@10.0.0.5:27017"
+	input := "server selection error: mongodb://FAKEUSER2:FAKEPASS2@10.0.0.5:27017"
 	result := utils.RedactMongoCredentials(input)
-	assert.NotContains(t, result, "otheruser")
-	assert.NotContains(t, result, "otherpass")
+	assert.NotContains(t, result, "FAKEUSER2")
+	assert.NotContains(t, result, "FAKEPASS2")
 	assert.Contains(t, result, "[REDACTED]")
 }
 

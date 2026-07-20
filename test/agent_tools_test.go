@@ -135,7 +135,7 @@ func TestDispatchToolCall_AggregateWithCSVFormat(t *testing.T) {
 
 func TestDispatchToolCall_RedactsMongoCredentialsInRepositoryError(t *testing.T) {
 	repo := &fakeMongoRepo{
-		findErr: errors.New("server selection error: mongodb+srv://dbuser:S3cr3t@cluster0.mongodb.net: context deadline exceeded"),
+		findErr: errors.New("server selection error: mongodb+srv://FAKEUSER:FAKEPASSWORD@example-cluster.test: context deadline exceeded"),
 	}
 	call := agent.ToolCall{
 		ID:        "call_x",
@@ -146,8 +146,8 @@ func TestDispatchToolCall_RedactsMongoCredentialsInRepositoryError(t *testing.T)
 	result, isErr := agent.DispatchToolCall(context.Background(), repo, 5, 50, call)
 
 	assert.True(t, isErr)
-	assert.NotContains(t, result, "dbuser")
-	assert.NotContains(t, result, "S3cr3t")
+	assert.NotContains(t, result, "FAKEUSER")
+	assert.NotContains(t, result, "FAKEPASSWORD")
 	assert.Contains(t, result, "[REDACTED]")
 }
 

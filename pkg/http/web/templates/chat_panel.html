@@ -3,7 +3,7 @@
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
   {{if .EmptyStateHint}}<p class="chat-empty-state">{{.EmptyStateHint}}</p>{{end}}
   {{range .Messages}}
-  <div class="msg msg-{{.Role}}">{{range .Segments}}{{if eq .Kind "table"}}<table class="md-table"><thead><tr>{{range .Header}}<th>{{.}}</th>{{end}}</tr></thead><tbody>{{range .Rows}}<tr>{{range .}}<td>{{.}}</td>{{end}}</tr>{{end}}</tbody></table>{{else}}{{.Text}}{{end}}{{end}}</div>
+  <div class="msg msg-{{.Role}}">{{range .Segments}}{{if eq .Kind "table"}}<table class="md-table"><thead><tr>{{range .Header}}<th>{{.}}</th>{{end}}</tr></thead><tbody>{{range .Rows}}<tr>{{range .}}<td>{{.}}</td>{{end}}</tr>{{end}}</tbody></table>{{else if eq .Kind "csv"}}<div class="csv-attachment"><a class="btn-secondary csv-download" href="{{.CSVDataURL}}" download="{{.CSVFilename}}">⬇ Descargar CSV{{if gt .CSVRowCount 0}} ({{.CSVRowCount}} fila{{if ne .CSVRowCount 1}}s{{end}}){{end}}</a></div>{{else}}{{.Text}}{{end}}{{end}}</div>
   {{end}}
   <div id="typing-indicator" class="msg msg-assistant" aria-live="polite"><span class="typing-dots"><span></span><span></span><span></span></span></div>
   <form id="message-form" hx-post="/web/tabs/{{.SessionID}}/messages" hx-target="#chat-panel-container" hx-swap="innerHTML swap:120ms" hx-indicator="#typing-indicator">

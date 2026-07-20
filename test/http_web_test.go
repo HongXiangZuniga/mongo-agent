@@ -203,7 +203,7 @@ func TestIndex_EmptyChatShowsDiscoveredCollectionsAsHint(t *testing.T) {
 
 func TestIndex_EmptyChatFallsBackToGenericHintWhenDiscoveryFails(t *testing.T) {
 	fakeSvc := newFakeAgentServiceWeb()
-	fakeSvc.collectionsErr = errors.New("mongodb unavailable: mongodb+srv://user:pass@cluster0.mongodb.net")
+	fakeSvc.collectionsErr = errors.New("mongodb unavailable: mongodb+srv://FAKEUSER:FAKEPASS@example-cluster.test")
 	r := setupWebHandler(fakeSvc)
 
 	req, _ := http.NewRequest(http.MethodGet, "/web", nil)
@@ -214,7 +214,7 @@ func TestIndex_EmptyChatFallsBackToGenericHintWhenDiscoveryFails(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	assert.Contains(t, body, "Escribe algo para empezar la conversación.")
-	assert.NotContains(t, body, "user:pass")
+	assert.NotContains(t, body, "FAKEUSER:FAKEPASS")
 }
 
 func TestIndex_ShowsMostRecentSessionAsActive(t *testing.T) {
@@ -360,7 +360,35 @@ func TestSwitchTab_ReturnsChatPanelForRequestedSession(t *testing.T) {
 	body := rec.Body.String()
 	assert.Contains(t, body, "mensaje s1")
 	assert.Equal(t, "s1", fakeSvc.lastGetConversation)
-	assert.NotContains(t, body, `hx-swap-oob="true"`)
+	assert.Contains(t, body, `hx-swap-oob="true"`)
+}
+
+func TestSwitchTab_UpdatesActiveTabInOOBTabBar(t *testing.T) {
+	fakeSvc := newFakeAgentServiceWeb()
+	fakeSvc.sessions = []agent.SessionSummary{
+		{SessionID: "s1", Title: "Uno", LastActivity: time.Now()},
+		{SessionID: "s2", Title: "Dos", LastActivity: time.Now().Add(-time.Hour)},
+	}
+
+	r := setupWebHandler(fakeSvc)
+
+	req, _ := http.NewRequest(http.MethodGet, "/web/tabs/s2", nil)
+	addAuthCookie(req)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	require.Contains(t, body, `hx-swap-oob="true"`)
+
+	dosIdx := strings.Index(body, ">Dos<")
+	unoIdx := strings.Index(body, ">Uno<")
+	require.NotEqual(t, -1, dosIdx)
+	require.NotEqual(t, -1, unoIdx)
+	dosButtonStart := strings.LastIndex(body[:dosIdx], "<button")
+	unoButtonStart := strings.LastIndex(body[:unoIdx], "<button")
+	assert.Contains(t, body[dosButtonStart:dosIdx], "tab-active")
+	assert.NotContains(t, body[unoButtonStart:unoIdx], "tab-active")
 }
 
 func TestSwitchTab_InvalidSessionIDReturns400(t *testing.T) {
@@ -598,4 +626,29 @@ func TestIndex_MessageContentIsHTMLEscapedInsideTable(t *testing.T) {
 	body := rec.Body.String()
 	assert.NotContains(t, body, "<script>alert(1)</script>")
 	assert.Contains(t, body, "&lt;script&gt;")
+}
+
+func TestIndex_RendersCSVFenceAsDownloadLink(t *testing.T) {
+	fakeSvc := newFakeAgentServiceWeb()
+	fakeSvc.sessions = []agent.SessionSummary{
+		{SessionID: "s1", Title: "CSV", LastActivity: time.Now()},
+	}
+	fakeSvc.messages["s1"] = []agent.Message{
+		{
+			Role:    agent.RoleAssistant,
+			Content: "Aquí tienes el resultado en CSV:\n\n```csv\nname,total\na,10\n```\n\nListo.",
+		},
+	}
+	r := setupWebHandler(fakeSvc)
+
+	req, _ := http.NewRequest(http.MethodGet, "/web", nil)
+	addAuthCookie(req)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.NotContains(t, body, "```csv")
+	assert.Contains(t, body, `download="resultado.csv"`)
+	assert.Contains(t, body, "data:text/csv;charset=utf-8;base64,")
 }

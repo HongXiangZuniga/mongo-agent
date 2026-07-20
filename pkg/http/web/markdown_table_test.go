@@ -2,6 +2,8 @@
 package web
 
 import (
+	"encoding/base64"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,4 +78,61 @@ func TestParseMessageContent_SeparatorWithColons(t *testing.T) {
 	require.Len(t, segments, 1)
 	assert.Equal(t, segmentKindTable, segments[0].Kind)
 	require.Len(t, segments[0].Rows, 1)
+}
+
+func decodeCSVDataURL(t *testing.T, dataURL string) string {
+	t.Helper()
+	const prefix = "data:text/csv;charset=utf-8;base64,"
+	require.True(t, strings.HasPrefix(dataURL, prefix), "unexpected data URL: %s", dataURL)
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(dataURL, prefix))
+	require.NoError(t, err)
+	return string(decoded)
+}
+
+func TestParseMessageContent_CSVFenceBecomesDownloadSegment(t *testing.T) {
+	content := "Aquí tienes el resultado en CSV:\n\n```csv\nname,total\na,10\nb,20\n```\n\nEso es todo."
+
+	segments := parseMessageContent(content)
+
+	require.Len(t, segments, 3)
+	assert.Equal(t, segmentKindText, segments[0].Kind)
+	assert.Equal(t, "Aquí tienes el resultado en CSV:\n", segments[0].Text)
+
+	csvSeg := segments[1]
+	assert.Equal(t, segmentKindCSV, csvSeg.Kind)
+	assert.Equal(t, "resultado.csv", csvSeg.CSVFilename)
+	assert.Equal(t, 2, csvSeg.CSVRowCount)
+	assert.Equal(t, "name,total\na,10\nb,20", decodeCSVDataURL(t, string(csvSeg.CSVDataURL)))
+
+	assert.Equal(t, segmentKindText, segments[2].Kind)
+	assert.Equal(t, "\nEso es todo.", segments[2].Text)
+}
+
+func TestParseMessageContent_CSVFenceCaseInsensitiveLanguageTag(t *testing.T) {
+	content := "```CSV\na,b\n1,2\n```"
+
+	segments := parseMessageContent(content)
+
+	require.Len(t, segments, 1)
+	assert.Equal(t, segmentKindCSV, segments[0].Kind)
+}
+
+func TestParseMessageContent_UnclosedCSVFenceIsPlainText(t *testing.T) {
+	content := "```csv\na,b\n1,2"
+
+	segments := parseMessageContent(content)
+
+	require.Len(t, segments, 1)
+	assert.Equal(t, segmentKindText, segments[0].Kind)
+	assert.Equal(t, content, segments[0].Text)
+}
+
+func TestParseMessageContent_NonCSVFenceIsPlainText(t *testing.T) {
+	content := "```json\n{\"a\":1}\n```"
+
+	segments := parseMessageContent(content)
+
+	require.Len(t, segments, 1)
+	assert.Equal(t, segmentKindText, segments[0].Kind)
+	assert.Equal(t, content, segments[0].Text)
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/utils"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/utils"
 )
 
 func TestIsValidSessionID_AcceptsAlphanumericWithDashesAndUnderscores(t *testing.T) {

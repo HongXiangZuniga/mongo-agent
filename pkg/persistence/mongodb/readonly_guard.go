@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/utils"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/utils"
 )
 
 // VerifyReadOnlyGuarantee intenta insertar un documento de prueba en una

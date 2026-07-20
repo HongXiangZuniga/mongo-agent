@@ -15,7 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/persistence/mongodb"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/persistence/mongodb"
 )
 
 func TestVerifyReadOnlyGuarantee_RealCluster(t *testing.T) {

@@ -1,4 +1,4 @@
-# agente-inaricards
+# mongo-agent
 
 > Agente conversacional en lenguaje natural sobre MongoDB, de **solo lectura**
 > y con **autodescubrimiento de esquema** — proyecto de portafolio que
@@ -13,7 +13,7 @@
 
 ## Que es esto
 
-`agente-inaricards` recibe preguntas en español por HTTP o por una interfaz
+`mongo-agent` recibe preguntas en español por HTTP o por una interfaz
 web de chat, **descubre por sí mismo el esquema de una base MongoDB** (sin un
 modelo de colecciones hardcodeado) y responde consultándola en tiempo real —
 siempre en modo lectura. Internamente es un bucle de tool-calling contra un
@@ -175,8 +175,8 @@ Ver [`.env.example`](./.env.example) para la lista completa. Resumen:
 
 ```bash
 # 1. Clonar el repositorio
-git clone git@github.com:HongXiangZuniga/agente-inaricards.git
-cd agente-inaricards
+git clone git@github.com:HongXiangZuniga/mongo-agent.git
+cd mongo-agent
 
 # 2. Copiar y completar variables de entorno
 cp .env.example .env

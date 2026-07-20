@@ -18,10 +18,10 @@ integration-test:
 docker-build:
 	docker build \
 	-f build/docker/Dockerfile \
-	-t agente-inaricards:local .
+	-t mongo-agent:local .
 
 docker-run:
 	docker-compose up -d
 	docker run --rm -it -p 8080:8080 \
 	--env-file ./.env \
-	agente-inaricards:local
+	mongo-agent:local

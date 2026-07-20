@@ -16,9 +16,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/agent"
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/http/rest"
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/utils"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/agent"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/http/rest"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/utils"
 )
 
 // fakeAgentService implementa agent.AgentService para los tests HTTP.

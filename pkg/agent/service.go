@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/utils"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/utils"
 )
 
 // systemPromptLeakMinMatchChars es el número mínimo de caracteres

@@ -16,8 +16,8 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/agent"
-	redisadapter "github.com/HongXiangZuniga/agente-inaricards/pkg/persistence/redis"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/agent"
+	redisadapter "github.com/HongXiangZuniga/mongo-agent/pkg/persistence/redis"
 )
 
 type redisTestStore struct {

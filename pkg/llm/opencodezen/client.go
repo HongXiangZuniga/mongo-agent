@@ -14,7 +14,7 @@ import (
 	"io"
 	"net/http"
 
-	agent "github.com/HongXiangZuniga/agente-inaricards/pkg/agent"
+	agent "github.com/HongXiangZuniga/mongo-agent/pkg/agent"
 )
 
 // client implementa agent.LLMClient usando net/http.

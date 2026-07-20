@@ -12,8 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/agent"
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/utils"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/agent"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/utils"
 )
 
 // emptyStateFallback se usa cuando el descubrimiento de colecciones falla o

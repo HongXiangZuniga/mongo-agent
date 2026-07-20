@@ -1,4 +1,4 @@
-module github.com/HongXiangZuniga/agente-inaricards
+module github.com/HongXiangZuniga/mongo-agent
 
 go 1.25.0
 

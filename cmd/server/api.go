@@ -28,13 +28,13 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/agent"
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/http/rest"
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/http/web"
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/llm/opencodezen"
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/persistence/mongodb"
-	redisadapter "github.com/HongXiangZuniga/agente-inaricards/pkg/persistence/redis"
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/utils"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/agent"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/http/rest"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/http/web"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/llm/opencodezen"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/persistence/mongodb"
+	redisadapter "github.com/HongXiangZuniga/mongo-agent/pkg/persistence/redis"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/utils"
 )
 
 // systemPrompt guía al agente para que actúe como lector de datos exclusivo.

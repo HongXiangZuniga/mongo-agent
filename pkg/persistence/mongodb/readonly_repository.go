@@ -17,8 +17,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	agent "github.com/HongXiangZuniga/agente-inaricards/pkg/agent"
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/utils"
+	agent "github.com/HongXiangZuniga/mongo-agent/pkg/agent"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/utils"
 )
 
 // storage implementa agent.ReadOnlyMongoRepository.

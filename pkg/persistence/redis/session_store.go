@@ -11,7 +11,7 @@ import (
 
 	goredis "github.com/redis/go-redis/v9"
 
-	agent "github.com/HongXiangZuniga/agente-inaricards/pkg/agent"
+	agent "github.com/HongXiangZuniga/mongo-agent/pkg/agent"
 )
 
 const sessionsIndexKey = "sessions:index"

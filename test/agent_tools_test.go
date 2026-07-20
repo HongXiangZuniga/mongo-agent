@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/HongXiangZuniga/agente-inaricards/pkg/agent"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/agent"
 )
 
 func TestDispatchToolCall_UnknownTool(t *testing.T) {

@@ -1,12 +1,59 @@
-version: '3.8'
 services:
   redis:
     image: redis:7-alpine
     container_name: mongo-agent-redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - agente_net
+
+  mongo-auth:
+    image: mongo:7
+    container_name: mongo-agent-auth-db
+    environment:
+      - MONGO_INITDB_DATABASE=authdb
+    volumes:
+      - mongo_auth_data:/data/db
+      - ./build/mongo-auth/seed.js:/docker-entrypoint-initdb.d/seed.js:ro
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - agente_net
+
+  api:
+    build:
+      context: .
+      dockerfile: build/docker/Dockerfile
+    container_name: mongo-agent-api
+    env_file:
+      - .env
+    environment:
+      - REDIS_ADDR=redis:6379
+      - AUTH_MONGODB_URI=mongodb://mongo-auth:27017
+      - AUTH_MONGODB_DB_NAME=authdb
+      - AUTH_MONGODB_USERS_COLLECTION=users
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongo-auth:
+        condition: service_healthy
+    networks:
+      - agente_net
+
+volumes:
+  mongo_auth_data:
 
 networks:
   agente_net:

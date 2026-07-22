@@ -2,11 +2,15 @@
 // chat basada en HTML + htmx.
 package web
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+
+	"github.com/HongXiangZuniga/mongo-agent/pkg/auth"
+)
 
 // RegisterRoutes registra las rutas de la interfaz web sobre un router gin
 // existente.
-func RegisterRoutes(r *gin.Engine, h WebHandlers, cfg CookieConfig) {
+func RegisterRoutes(r *gin.Engine, h WebHandlers, cfg CookieConfig, sessions auth.WebSessionManager) {
 	r.GET("/web/static/htmx.min.js", serveHTMXAsset)
 	r.GET("/web/static/app.css", serveAppCSS)
 	r.GET("/web/static/fonts/:filename", serveFont)
@@ -15,7 +19,7 @@ func RegisterRoutes(r *gin.Engine, h WebHandlers, cfg CookieConfig) {
 	r.POST("/web/logout", h.Logout)
 
 	authed := r.Group("/web")
-	authed.Use(CookieAuthMiddleware(cfg))
+	authed.Use(CookieAuthMiddleware(cfg, sessions))
 	authed.GET("", h.Index)
 	authed.POST("/tabs", h.NewTab)
 	authed.GET("/tabs/:sessionId", h.SwitchTab)

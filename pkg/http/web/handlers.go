@@ -4,7 +4,6 @@ package web
 
 import (
 	"context"
-	"crypto/subtle"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/HongXiangZuniga/mongo-agent/pkg/agent"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/auth"
 	"github.com/HongXiangZuniga/mongo-agent/pkg/utils"
 )
 
@@ -33,14 +33,16 @@ type WebHandlers interface {
 }
 
 type webPort struct {
-	agentService agent.AgentService
-	cookieCfg    CookieConfig
-	scrubber     *utils.SecretScrubber
+	agentService  agent.AgentService
+	cookieCfg     CookieConfig
+	scrubber      *utils.SecretScrubber
+	authenticator auth.Authenticator
+	webSessions   auth.WebSessionManager
 }
 
 // NewWebHandler construye el handler de la interfaz web.
-func NewWebHandler(agentService agent.AgentService, cookieCfg CookieConfig, scrubber *utils.SecretScrubber) WebHandlers {
-	return &webPort{agentService, cookieCfg, scrubber}
+func NewWebHandler(agentService agent.AgentService, cookieCfg CookieConfig, scrubber *utils.SecretScrubber, authenticator auth.Authenticator, webSessions auth.WebSessionManager) WebHandlers {
+	return &webPort{agentService, cookieCfg, scrubber, authenticator, webSessions}
 }
 
 // Index renderiza la página completa de chat.
@@ -88,20 +90,33 @@ func (p *webPort) LoginForm(c *gin.Context) {
 	_ = render(c.Writer, "login", struct{ Error string }{})
 }
 
-// Login valida el token y fija la cookie de autenticación.
+// Login valida usuario/contraseña contra el caso de uso de autenticación y, si
+// son válidos, crea una sesión web real (respaldada en Redis) y fija la cookie
+// con el session ID opaco. La cookie NUNCA transporta API_TOKEN ni la
+// contraseña del usuario.
 func (p *webPort) Login(c *gin.Context) {
-	token := c.PostForm("token")
-	if subtle.ConstantTimeCompare([]byte(token), []byte(p.cookieCfg.APIToken)) != 1 {
+	username := c.PostForm("username")
+	password := c.PostForm("password")
+
+	if _, err := p.authenticator.Authenticate(c.Request.Context(), username, password); err != nil {
 		c.Status(http.StatusUnauthorized)
 		c.Header("Content-Type", "text/html; charset=utf-8")
-		_ = render(c.Writer, "login", struct{ Error string }{Error: "Token inválido"})
+		_ = render(c.Writer, "login", struct{ Error string }{Error: "Usuario o contraseña inválidos"})
+		return
+	}
+
+	sessionID, err := p.webSessions.Create(c.Request.Context(), username)
+	if err != nil {
+		c.Status(http.StatusServiceUnavailable)
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		_ = render(c.Writer, "login", struct{ Error string }{Error: "No se pudo iniciar la sesión, inténtalo de nuevo"})
 		return
 	}
 
 	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie(
 		p.cookieCfg.CookieName,
-		token,
+		sessionID,
 		int(p.cookieCfg.MaxAge.Seconds()),
 		"/web",
 		"",
@@ -111,8 +126,14 @@ func (p *webPort) Login(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/web")
 }
 
-// Logout borra la cookie de autenticación.
+// Logout revoca la sesión del lado servidor (borra la key en Redis) y expira la
+// cookie del navegador, de modo que la cookie no pueda reutilizarse aunque el
+// cliente la conserve.
 func (p *webPort) Logout(c *gin.Context) {
+	if sessionID, err := c.Cookie(p.cookieCfg.CookieName); err == nil && sessionID != "" {
+		_ = p.webSessions.Revoke(c.Request.Context(), sessionID)
+	}
+
 	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie(
 		p.cookieCfg.CookieName,

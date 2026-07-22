@@ -8,7 +8,6 @@
 .env
 # Test binary, built with `go test -c`
 *.test
-openspec
 
 # Output of the go coverage tool
 *.out

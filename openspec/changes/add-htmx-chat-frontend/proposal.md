@@ -1,0 +1,45 @@
+## Why
+
+Hoy `mongo-agent` solo se puede usar mediante `POST /ask` con un cliente HTTP genérico (curl, Postman, etc.), lo cual no permite demostrarlo visualmente como pieza de portafolio ni sostener varias conversaciones en paralelo de forma cómoda. Se necesita una interfaz web mínima, servida por el propio backend Go, que permita chatear con el agente desde el navegador manteniendo varias conversaciones simultáneas en pestañas (estilo navegador/VS Code), sin introducir un frontend SPA separado ni duplicar la lógica de negocio ya implementada en `pkg/agent`.
+
+## What Changes
+
+**[Interfaz web de chat con pestañas por sesión]**
+- From: No existe ninguna superficie de usuario visual; el agente solo es accesible vía `POST /ask` (JSON).
+- To: Un nuevo adapter de entrada `pkg/http/web` sirve una página HTML (`GET /web`) con una barra de pestañas renderizada server-side (una pestaña = una sesión de chat/`session_id`), donde htmx intercambia únicamente el panel de chat activo (mensajes + input) al cambiar de pestaña, crear una pestaña, enviar un mensaje o cerrar una pestaña, sin recargar la página completa.
+- Reason: Permite demostrar el agente de forma visual e interactiva como pieza de portafolio, y probar conversaciones multi-turno en paralelo sin herramientas externas.
+- Impact: Non-breaking (superficie nueva). No modifica `pkg/http/rest` ni el contrato de `POST /ask`, que queda intacto para consumidores API existentes.
+
+**[Extensión del caso de uso existente para gestión de sesiones, sin duplicar lógica de negocio]**
+- From: `AgentService` (puerto de entrada en `pkg/agent/service.go`) solo expone `Ask`.
+- To: `AgentService` se amplía con `ListSessions`, `CreateSession`, `CloseSession` y `GetConversation`, delegando en el puerto de salida `SessionStore` ya existente. El adapter `pkg/http/web` consume exclusivamente `AgentService`, exactamente igual que `pkg/http/rest`, sin acceder directamente a `SessionStore` ni a ningún adapter concreto de infraestructura.
+- Reason: Mantener la regla de dependencia hexagonal (los adapters de entrada solo hablan con la capa de aplicación, nunca con puertos de salida directamente) y evitar una segunda implementación del ciclo de vida de sesión.
+- Impact: Non-breaking a nivel de comportamiento observable de `Ask` (no cambia su firma ni su lógica interna de tool-calling). Amplía la interfaz `AgentService` con 4 métodos nuevos; cualquier implementación adicional futura de `AgentService` (hoy solo existe `service`) deberá implementarlos.
+
+**[Persistencia del listado de sesiones/pestañas en Redis]**
+- From: `SessionStore` solo permite `AppendMessage`, `GetHistory`, `ClearSession` sobre una sesión ya conocida por su ID; no existe forma de enumerar qué sesiones existen ni desde cuándo están activas.
+- To: `SessionStore` se amplía con `ListSessions` (devuelve `SessionSummary` con `SessionID`, `Title` y `LastActivity`, ordenadas por actividad más reciente primero) y `TouchSession` (crea o actualiza la metadata de una sesión: título derivado de la primera pregunta y marca de tiempo de última actividad). `ClearSession` se modifica para además eliminar la sesión del índice. Toda sesión que recibe al menos una pregunta —ya sea vía `POST /ask` o vía la UI web— queda indexada y sobrevive a recargas del navegador; una sesión deja de listarse en cuanto expira su TTL en Redis, sin necesidad de un proceso de limpieza en segundo plano (limpieza perezosa en lectura).
+- Reason: El requerimiento exige que el listado de pestañas persista tras recargar la página, y que respete el mismo TTL/expiración que ya tiene el historial de mensajes, sin mantener dos fuentes de verdad de expiración distintas ni introducir un tercer sistema de almacenamiento.
+- Impact: Non-breaking (extensión de interfaz). Afecta a `pkg/agent/session_port.go`, `pkg/persistence/redis/session_store.go`, y modifica el comportamiento observable de `ClearSession` (ahora también limpia el índice).
+
+**[Autenticación de la superficie web mediante cookie, reutilizando el mismo secreto que la API]**
+- From: No aplica (no existe superficie web).
+- To: Todas las rutas bajo `/web` (excepto `GET /web/login` y `POST /web/login`) exigen una cookie HttpOnly (`web_auth` por defecto, configurable) cuyo valor se compara en tiempo constante contra la misma variable de entorno `API_TOKEN` ya usada por `POST /ask`. Un formulario simple en `/web/login` permite introducir el token una vez y obtener la cookie; `POST /web/logout` la revoca.
+- Reason: El endpoint `/ask` ya exige `API_TOKEN` porque cada petición dispara llamadas de pago a un LLM y consultas reales a MongoDB; dejar `/web` sin ninguna protección sería inconsistente con esa decisión ya tomada. Un header `Authorization` no es viable para navegación normal de navegador (no se puede adjuntar a la carga de una página HTML completa sin JavaScript adicional en cada `GET`), mientras que una cookie es el mecanismo nativo del navegador para persistir "ya autenticado" entre navegaciones. Se reutiliza `API_TOKEN` como valor de la cookie en vez de introducir un segundo secreto, para no añadir superficie de configuración a un proyecto de portafolio.
+- Impact: Non-breaking (superficie nueva). Trade-off aceptado explícitamente (ver `design.md`, decisión D-W2): la cookie contiene el mismo secreto que el header de la API; no hay expiración server-side independiente del `Max-Age` de la cookie, no hay protección CSRF dedicada más allá de `SameSite=Strict`, y no hay aislamiento por usuario/navegador (todo poseedor de la cookie ve el mismo listado global de sesiones en Redis, porque el proyecto no tiene concepto de usuario). Aceptable para un proyecto de demo/portafolio de un solo operador; explícitamente fuera de alcance para un despliegue multiusuario real.
+
+## Capabilities
+
+### New Capabilities
+- `chat-web-frontend`: interfaz web de chat servida por el propio backend (HTML + htmx), con pestañas por sesión persistidas en Redis, autenticación por cookie compartiendo el secreto `API_TOKEN`, y fragmentos renderizados server-side con `html/template` de la librería estándar de Go, consumiendo exclusivamente el mismo `AgentService` que usa la API JSON.
+
+### Modified Capabilities
+- `nl-mongo-agent`: se amplía `AgentService`/`SessionStore` con capacidad de listar, crear y cerrar sesiones de forma explícita, y de indexar toda sesión activa con metadata mínima (título derivado de la primera pregunta, marca de última actividad), respetando el mismo TTL que ya tiene el historial de mensajes.
+
+## Impact
+
+- Código nuevo: `pkg/http/web` (adapter de entrada web completo: router, middleware de auth por cookie, handlers, plantillas HTML embebidas, assets estáticos vendored: `htmx.min.js`, `app.css` y fuentes `JetBrains Mono`).
+- Código modificado: `pkg/agent/session_port.go` (nuevos métodos `ListSessions`/`TouchSession` + tipo `SessionSummary`), `pkg/agent/service.go` (nuevos métodos `ListSessions`/`CreateSession`/`CloseSession`/`GetConversation` en `AgentService`, y `Ask` ahora también indexa la sesión), `pkg/persistence/redis/session_store.go` (índice de sesiones respaldado por un `ZSET` + metadata en `HASH`), `pkg/utils/errors.go` (extracción de un mapeo de errores compartido entre `pkg/http/rest` y `pkg/http/web`), `cmd/server/api.go` (wiring de las nuevas rutas, configuración de cookie y del nuevo parámetro `sessionTitleMaxLength`).
+- Sin impacto en `pkg/http/rest` a nivel de contrato observable: `POST /ask` conserva exactamente el mismo request/response documentado en `openspec/changes/add-nl-mongo-agent/specs/nl-mongo-agent/spec.md`.
+- Dependencias externas nuevas: ninguna dependencia Go nueva (no se añade ningún framework de frontend ni SDK). Se vendorizan archivos estáticos de terceros servidos directamente por el backend Go, sin CDN externo en runtime: `htmx.min.js` (licencia BSD-2-Clause) y dos pesos de la tipografía `JetBrains Mono` en formato `.woff2` (licencia SIL Open Font License, ver `design-ui.md`). Se añade además `pkg/http/web/static/app.css`, hoja de estilos propia (no de terceros) que reemplaza el `<style>` inline duplicado que existía antes en `layout.html`/`login.html`. No se introduce Node.js, `npm`, ni un paso de build de frontend; el sistema visual completo (paleta, tipografía, accesibilidad) está documentado en `design-ui.md`.
+- Non-goals explícitos de este cambio: no se implementa autenticación de usuarios multi-tenant (todas las pestañas visibles son globales al Redis del despliegue, no hay concepto de "usuario" ni de propietario de sesión); no se implementa streaming de tokens vía WebSockets/SSE (las respuestas del agente se devuelven completas, igual que en `POST /ask`); no se reemplaza ni modifica `POST /ask`, que sigue siendo el punto de entrada JSON para consumidores API; no se implementa protección CSRF dedicada más allá de `SameSite=Strict` en la cookie; no se persiste el historial de conversación más allá del TTL ya existente (no es un data warehouse de conversaciones); no se limita el número de pestañas abiertas por sesión de navegador.

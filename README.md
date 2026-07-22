@@ -172,6 +172,15 @@ Ver [`.env.example`](./.env.example) para la lista completa. Resumen:
 | `REDIS_PASSWORD` | Password de Redis (vacio en desarrollo local) | `""` | No |
 | `REDIS_DB` | Indice de base Redis | `0` | No |
 | `SESSION_TTL_SECONDS` | TTL del historial de conversacion por sesion | `3600` | No |
+| `AUTH_MONGODB_URI` | Cadena de conexion a la base de usuarios del login (instancia MongoDB **local**, separada del cluster Atlas de solo lectura del agente). En docker-compose el host es `mongo-auth`. | — | **Si** |
+| `AUTH_MONGODB_DB_NAME` | Base de datos de usuarios del login | — | **Si** |
+| `AUTH_MONGODB_USERS_COLLECTION` | Coleccion de usuarios en la base de login | `users` | No |
+
+> La base de usuarios del login (`AUTH_MONGODB_*`) es una instancia MongoDB
+> **local y dedicada**, completamente separada del cluster MongoDB Atlas de
+> solo lectura del agente (`MONGODB_URI`). Solo la conexion del agente se
+> verifica con `mongodb.VerifyReadOnlyGuarantee`; la base de usuarios nunca se
+> mezcla con esa garantia.
 
 ## Correr localmente
 
@@ -200,6 +209,53 @@ make run
 `make run` levanta Redis en segundo plano con `docker-compose up -d` y luego
 ejecuta `go run cmd/server/api.go`. MongoDB es el cluster de Atlas remoto (no
 requiere contenedor local).
+
+### Llegar y montar con docker-compose
+
+Para levantar **toda la topologia con un solo comando** (Redis + base de
+usuarios MongoDB ya seedeada + API Go), sin instalar nada localmente salvo
+Docker:
+
+```bash
+# 1. Completar .env con los secretos externos:
+#    API_TOKEN, MONGODB_URI (Atlas), MONGODB_DB_NAME, OPENCODE_API_KEY.
+#    (Las variables AUTH_MONGODB_* las sobreescribe docker-compose hacia el
+#     servicio mongo-auth; no necesitas tocarlas para el arranque integral.)
+cp .env.example .env
+
+# 2. Levantar todo:
+docker-compose up --build   # o: make compose-up
+```
+
+`docker-compose up --build` construye la API desde `build/docker/Dockerfile` y
+levanta tres servicios enlazados en la misma red:
+
+- `redis` — memoria de conversacion por sesion (con healthcheck).
+- `mongo-auth` — MongoDB **local** de usuarios del login; en su primera
+  inicializacion ejecuta `build/mongo-auth/seed.js` (montado en
+  `/docker-entrypoint-initdb.d`) y precarga el usuario de prueba (con healthcheck).
+- `api` — el binario Go; **arranca solo cuando Redis y mongo-auth reportan
+  estado saludable**. Alcanza sus dependencias por nombre de servicio
+  (`redis:6379`, `mongodb://mongo-auth:27017`), no por `localhost`.
+
+Tras el arranque, abre `http://localhost:8080/web`, seras redirigido al login
+y podras entrar con el [usuario de prueba](#usuario-de-prueba-login-web).
+
+El seed solo se ejecuta en la **primera** inicializacion del volumen
+`mongo_auth_data`. Para reejecutarlo desde cero: `docker-compose down -v` y
+luego `docker-compose up --build`.
+
+#### Usuario de prueba (login web)
+
+La base de usuarios se precarga (via seed) con un unico usuario de prueba,
+pensado **solo para la POC**:
+
+- **Usuario:** `admin`
+- **Contraseña:** `admin123`
+
+La contraseña se almacena **hasheada con bcrypt** (`password_hash`) en la base
+de usuarios; el texto plano `admin123` solo aparece en esta documentacion,
+nunca en la base de datos ni en `seed.js`.
 
 ### Otros comandos
 
@@ -300,9 +356,10 @@ conversaciones en paralelo como pestañas (una pestaña = una sesión = un
   el primer mensaje.
 - **Endpoints**:
   - `GET /web/login` — formulario de login.
-  - `POST /web/login` — enviar el campo `token` con el mismo valor de
-    `API_TOKEN` para obtener una cookie de autenticación.
-  - `POST /web/logout` — revocar la cookie.
+  - `POST /web/login` — enviar **usuario y contraseña** (`username`,
+    `password`), validados contra la base MongoDB de usuarios (verificacion
+    bcrypt); si son correctos se obtiene una cookie de autenticación.
+  - `POST /web/logout` — cerrar sesión: revoca la sesión del lado servidor (borra su key en Redis) y expira la cookie.
   - `GET /web` — página principal con la barra de pestañas y el chat activo
     (requiere cookie).
   - `POST /web/tabs` — crear una pestaña nueva (efímera hasta el primer
@@ -310,11 +367,22 @@ conversaciones en paralelo como pestañas (una pestaña = una sesión = un
   - `GET /web/tabs/:sessionId` — cambiar a una pestaña existente.
   - `POST /web/tabs/:sessionId/messages` — enviar un mensaje.
   - `DELETE /web/tabs/:sessionId` — cerrar una pestaña y eliminar su sesión.
-- **Autenticación**: la cookie es HttpOnly, `Path=/web`, `SameSite=Strict`,
-  `Secure` configurable (`WEB_COOKIE_SECURE`). **El valor de la cookie es el
-  mismo `API_TOKEN`** configurado para la API REST. Para acceder, entrar a
-  `/web/login` e introducir el mismo token. La cookie expira según
-  `WEB_SESSION_MAX_AGE_SECONDS` (por defecto 7 días).
+- **Autenticación**: el login web usa **usuario y contraseña** validados
+  contra una base MongoDB local de usuarios, con la contraseña verificada por
+  **bcrypt** (nunca en texto plano). Tras un login correcto la interfaz `/web`
+  crea una **sesión de servidor**: un identificador opaco (256 bits, aleatorio)
+  guardado en Redis (namespace `web_session:*`) asociado al usuario autenticado.
+  Ese session ID viaja en una cookie HttpOnly, `Path=/web`, `SameSite=Strict`,
+  `Secure` configurable (`WEB_COOKIE_SECURE`) y se **valida contra Redis en cada
+  petición**. La cookie ya **no transporta `API_TOKEN`** ni la contraseña del
+  usuario: conocer `API_TOKEN` ya no permite entrar a `/web`. El logout
+  **invalida la sesión del lado servidor** (borra su key en Redis), de modo que
+  una cookie robada deja de servir aunque el cliente la conserve. `POST /ask`
+  (API REST) no cambia: se sigue autenticando con el header `Authorization` ==
+  `API_TOKEN`, independiente del login web. La variable
+  `WEB_SESSION_MAX_AGE_SECONDS` (por defecto 7 días) fija a la vez el `MaxAge` de
+  la cookie y el TTL de la sesión web en Redis, para que ambos caduquen juntos.
+  Credenciales de prueba: ver [Usuario de prueba (login web)](#usuario-de-prueba-login-web).
 - **Variables de entorno específicas**: `WEB_AUTH_COOKIE_NAME`,
   `WEB_COOKIE_SECURE`, `WEB_SESSION_MAX_AGE_SECONDS`,
   `WEB_SESSION_TITLE_MAX_LENGTH` — ver `.env.example`.

@@ -29,11 +29,14 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/HongXiangZuniga/mongo-agent/pkg/agent"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/auth"
 	"github.com/HongXiangZuniga/mongo-agent/pkg/http/rest"
 	"github.com/HongXiangZuniga/mongo-agent/pkg/http/web"
 	"github.com/HongXiangZuniga/mongo-agent/pkg/llm/opencodezen"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/persistence/authmongo"
 	"github.com/HongXiangZuniga/mongo-agent/pkg/persistence/mongodb"
 	redisadapter "github.com/HongXiangZuniga/mongo-agent/pkg/persistence/redis"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/security"
 	"github.com/HongXiangZuniga/mongo-agent/pkg/utils"
 )
 
@@ -80,6 +83,10 @@ var (
 	webSessionMaxAge         time.Duration
 	webSessionTitleMaxLength int
 
+	authMongodbURI       string
+	authMongodbDBName    string
+	authMongodbUsersColl string
+
 	secretScrubber *utils.SecretScrubber
 )
 
@@ -108,10 +115,16 @@ func init() {
 	webSessionMaxAge = parseDurationSeconds(getenv("WEB_SESSION_MAX_AGE_SECONDS", "604800"))
 	webSessionTitleMaxLength = parseInt(getenv("WEB_SESSION_TITLE_MAX_LENGTH", "40"))
 
+	authMongodbURI = getenv("AUTH_MONGODB_URI", "")
+	authMongodbDBName = getenv("AUTH_MONGODB_DB_NAME", "")
+	authMongodbUsersColl = getenv("AUTH_MONGODB_USERS_COLLECTION", "users")
+
 	requireEnv("API_TOKEN", apiToken)
 	requireEnv("MONGODB_URI", mongodbURI)
 	requireEnv("MONGODB_DB_NAME", mongodbDBName)
 	requireEnv("OPENCODE_API_KEY", opencodeAPIKey)
+	requireEnv("AUTH_MONGODB_URI", authMongodbURI)
+	requireEnv("AUTH_MONGODB_DB_NAME", authMongodbDBName)
 
 	if redisPassword == "" {
 		log.Println("warning: REDIS_PASSWORD is empty; Redis is running without authentication (acceptable for local development only)")
@@ -210,6 +223,20 @@ func main() {
 
 	redisClient := initRedis(redisAddr, redisPassword, redisDB)
 
+	// Segunda conexión MongoDB, dedicada a la base de usuarios del login.
+	// NO se le aplica VerifyReadOnlyGuarantee: ese invariante es exclusivo del
+	// cluster Atlas de solo lectura del agente (mdb), no de la base de usuarios.
+	authDB := initMongo(authMongodbURI, authMongodbDBName)
+	userRepo := authmongo.NewUserRepository(authDB, authMongodbUsersColl, mongodbQueryTimeout)
+	passwordHasher := security.NewBcryptHasher()
+	authService := auth.NewService(userRepo, passwordHasher)
+
+	// Sesión web real respaldada en Redis (ver design.md D2, D10-D12). Reutiliza
+	// el redisClient ya inicializado y WEB_SESSION_MAX_AGE_SECONDS como TTL, para
+	// que la cookie y la sesión de servidor caduquen a la vez.
+	webSessionStore := redisadapter.NewWebSessionStore(redisClient, webSessionMaxAge)
+	webSessionManager := auth.NewWebSessionManager(webSessionStore)
+
 	mongoRepo := mongodb.NewReadOnlyRepository(mdb, mongodbQueryTimeout)
 	sessionStore := redisadapter.NewSessionStore(redisClient, sessionTTL)
 	llmClient := opencodezen.NewClient(
@@ -230,21 +257,17 @@ func main() {
 		webSessionTitleMaxLength,
 	)
 	agentHandler := rest.NewAgentHandler(agentService, secretScrubber)
-	webHandler := web.NewWebHandler(agentService, web.CookieConfig{
+
+	cookieCfg := web.CookieConfig{
 		CookieName: webAuthCookieName,
 		MaxAge:     webSessionMaxAge,
 		Secure:     webCookieSecure,
-		APIToken:   apiToken,
-	}, secretScrubber)
+	}
+	webHandler := web.NewWebHandler(agentService, cookieCfg, secretScrubber, authService, webSessionManager)
 
 	r := gin.Default()
 	rest.RegisterRoutes(r, agentHandler, apiToken)
-	web.RegisterRoutes(r, webHandler, web.CookieConfig{
-		CookieName: webAuthCookieName,
-		MaxAge:     webSessionMaxAge,
-		Secure:     webCookieSecure,
-		APIToken:   apiToken,
-	})
+	web.RegisterRoutes(r, webHandler, cookieCfg, webSessionManager)
 
 	log.Printf("starting server on port %s", port)
 	if err := r.Run(":" + port); err != nil {

@@ -25,3 +25,6 @@ docker-run:
 	docker run --rm -it -p 8080:8080 \
 	--env-file ./.env \
 	mongo-agent:local
+
+compose-up:
+	docker-compose up --build

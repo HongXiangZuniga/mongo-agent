@@ -17,8 +17,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/HongXiangZuniga/mongo-agent/pkg/agent"
+	"github.com/HongXiangZuniga/mongo-agent/pkg/auth"
 	"github.com/HongXiangZuniga/mongo-agent/pkg/http/web"
 )
+
+// validSessionID es un session ID que el fakeWebSessionManager por defecto
+// acepta como sesión activa. Simula el ID opaco que Login guardó en Redis.
+const validSessionID = "valid-session-id"
+
+// createdSessionID es el ID que devuelve Create en el fake (simula el ID recién
+// generado en un login correcto).
+const createdSessionID = "created-session-id"
 
 // fakeAgentServiceWeb implementa agent.AgentService para los tests web.
 type fakeAgentServiceWeb struct {
@@ -105,21 +114,88 @@ func (f *fakeAgentServiceWeb) ListAvailableCollections(ctx context.Context) ([]s
 	return f.collections, nil
 }
 
+// fakeWebAuthenticator implementa auth.Authenticator para los tests web.
+// Acepta la pareja usuario/contraseña configurada; para cualquier otra
+// devuelve auth.ErrInvalidCredentials.
+type fakeWebAuthenticator struct {
+	okUser string
+	okPass string
+}
+
+func (f fakeWebAuthenticator) Authenticate(ctx context.Context, username, password string) (auth.User, error) {
+	if username == f.okUser && password == f.okPass {
+		return auth.User{Username: username, PasswordHash: "hash"}, nil
+	}
+	return auth.User{}, auth.ErrInvalidCredentials
+}
+
+// fakeWebSessionManager implementa auth.WebSessionManager para los tests web.
+// Captura el username recibido en Create, devuelve un ID fijo conocido, permite
+// configurar el error de Validate (o una lista de IDs válidos) y captura el
+// sessionID recibido en Revoke.
+type fakeWebSessionManager struct {
+	createID       string
+	createErr      error
+	createUsername string
+	createCalls    int
+
+	validIDs map[string]bool
+
+	revokedID   string
+	revokeCalls int
+}
+
+func newFakeWebSessionManager() *fakeWebSessionManager {
+	return &fakeWebSessionManager{
+		createID: createdSessionID,
+		validIDs: map[string]bool{validSessionID: true},
+	}
+}
+
+func (f *fakeWebSessionManager) Create(ctx context.Context, username string) (string, error) {
+	f.createCalls++
+	f.createUsername = username
+	if f.createErr != nil {
+		return "", f.createErr
+	}
+	return f.createID, nil
+}
+
+func (f *fakeWebSessionManager) Validate(ctx context.Context, sessionID string) (auth.WebSession, error) {
+	if f.validIDs[sessionID] {
+		return auth.WebSession{Username: "admin", CreatedAt: time.Now()}, nil
+	}
+	return auth.WebSession{}, auth.ErrWebSessionNotFound
+}
+
+func (f *fakeWebSessionManager) Revoke(ctx context.Context, sessionID string) error {
+	f.revokeCalls++
+	f.revokedID = sessionID
+	return nil
+}
+
 func setupWebHandler(fakeSvc *fakeAgentServiceWeb) *gin.Engine {
+	return setupWebHandlerWithDeps(fakeSvc, fakeWebAuthenticator{okUser: "admin", okPass: "admin123"}, newFakeWebSessionManager())
+}
+
+func setupWebHandlerWithAuth(fakeSvc *fakeAgentServiceWeb, authr auth.Authenticator) *gin.Engine {
+	return setupWebHandlerWithDeps(fakeSvc, authr, newFakeWebSessionManager())
+}
+
+func setupWebHandlerWithDeps(fakeSvc *fakeAgentServiceWeb, authr auth.Authenticator, mgr auth.WebSessionManager) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	cfg := web.CookieConfig{
 		CookieName: "web_auth",
 		MaxAge:     time.Hour,
 		Secure:     false,
-		APIToken:   "test-token",
 	}
-	web.RegisterRoutes(r, web.NewWebHandler(fakeSvc, cfg, nil), cfg)
+	web.RegisterRoutes(r, web.NewWebHandler(fakeSvc, cfg, nil, authr, mgr), cfg, mgr)
 	return r
 }
 
 func addAuthCookie(req *http.Request) {
-	req.AddCookie(&http.Cookie{Name: "web_auth", Value: "test-token"})
+	req.AddCookie(&http.Cookie{Name: "web_auth", Value: validSessionID})
 }
 
 func TestCookieAuthMiddleware_RejectsMissingCookie(t *testing.T) {
@@ -133,11 +209,52 @@ func TestCookieAuthMiddleware_RejectsMissingCookie(t *testing.T) {
 	assert.Equal(t, "/web/login", rec.Header().Get("Location"))
 }
 
-func TestCookieAuthMiddleware_RejectsWrongToken(t *testing.T) {
+func TestCookieAuth_ValidSessionAllows(t *testing.T) {
+	fakeSvc := newFakeAgentServiceWeb()
+	r := setupWebHandler(fakeSvc)
+
+	req, _ := http.NewRequest(http.MethodGet, "/web", nil)
+	addAuthCookie(req)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestCookieAuth_InvalidSessionRedirects(t *testing.T) {
+	// Petición normal: Validate falla → 303 a /web/login.
 	r := setupWebHandler(newFakeAgentServiceWeb())
 
 	req, _ := http.NewRequest(http.MethodGet, "/web", nil)
-	req.AddCookie(&http.Cookie{Name: "web_auth", Value: "wrong-token"})
+	req.AddCookie(&http.Cookie{Name: "web_auth", Value: "no-registrada"})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	assert.Equal(t, "/web/login", rec.Header().Get("Location"))
+
+	// Petición htmx: Validate falla → HX-Redirect a /web/login.
+	req2, _ := http.NewRequest(http.MethodGet, "/web/tabs/abc", nil)
+	req2.AddCookie(&http.Cookie{Name: "web_auth", Value: "no-registrada"})
+	req2.Header.Set("HX-Request", "true")
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, req2)
+
+	assert.Equal(t, http.StatusUnauthorized, rec2.Code)
+	assert.Equal(t, "/web/login", rec2.Header().Get("HX-Redirect"))
+	assert.Empty(t, rec2.Body.String())
+}
+
+// TestCookieAuth_ArbitraryCookieRejected es el test de regresión del bug: una
+// cookie cuyo valor es un API_TOKEN de ejemplo (o cualquier string no
+// registrado como sesión) debe ser RECHAZADA por el middleware. Confirma que ya
+// no basta con conocer API_TOKEN para entrar a /web.
+func TestCookieAuth_ArbitraryCookieRejected(t *testing.T) {
+	r := setupWebHandler(newFakeAgentServiceWeb())
+
+	req, _ := http.NewRequest(http.MethodGet, "/web", nil)
+	// Valor que en el modelo antiguo (bug) habría sido aceptado: el API_TOKEN.
+	req.AddCookie(&http.Cookie{Name: "web_auth", Value: "super-secret-api-token"})
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -254,11 +371,13 @@ func TestLoginForm_RendersWithoutError(t *testing.T) {
 	assert.Contains(t, body, `action="/web/login"`)
 }
 
-func TestLogin_ValidTokenSetsCookieAndRedirects(t *testing.T) {
-	r := setupWebHandler(newFakeAgentServiceWeb())
+func TestLogin_ValidCredentialsCreatesSessionAndSetsCookie(t *testing.T) {
+	mgr := newFakeWebSessionManager()
+	r := setupWebHandlerWithDeps(newFakeAgentServiceWeb(), fakeWebAuthenticator{okUser: "admin", okPass: "admin123"}, mgr)
 
 	form := url.Values{}
-	form.Set("token", "test-token")
+	form.Set("username", "admin")
+	form.Set("password", "admin123")
 	req, _ := http.NewRequest(http.MethodPost, "/web/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -266,18 +385,28 @@ func TestLogin_ValidTokenSetsCookieAndRedirects(t *testing.T) {
 
 	require.Equal(t, http.StatusSeeOther, rec.Code)
 	assert.Equal(t, "/web", rec.Header().Get("Location"))
+
+	// Create se invocó con el username autenticado.
+	assert.Equal(t, 1, mgr.createCalls)
+	assert.Equal(t, "admin", mgr.createUsername)
+
 	setCookie := rec.Header().Get("Set-Cookie")
-	assert.Contains(t, setCookie, "web_auth=test-token")
+	// La cookie transporta el session ID devuelto por Create, NO el API_TOKEN
+	// ni la contraseña.
+	assert.Contains(t, setCookie, "web_auth="+createdSessionID)
+	assert.NotContains(t, setCookie, "admin123")
 	assert.Contains(t, setCookie, "HttpOnly")
 	assert.Contains(t, setCookie, "Path=/web")
 	assert.Contains(t, setCookie, "SameSite=Strict")
 }
 
-func TestLogin_InvalidTokenRendersErrorWithoutCookie(t *testing.T) {
-	r := setupWebHandler(newFakeAgentServiceWeb())
+func TestLogin_InvalidCredentialsReturns401(t *testing.T) {
+	mgr := newFakeWebSessionManager()
+	r := setupWebHandlerWithDeps(newFakeAgentServiceWeb(), fakeWebAuthenticator{okUser: "admin", okPass: "admin123"}, mgr)
 
 	form := url.Values{}
-	form.Set("token", "wrong-token")
+	form.Set("username", "admin")
+	form.Set("password", "wrong-password")
 	req, _ := http.NewRequest(http.MethodPost, "/web/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -285,27 +414,52 @@ func TestLogin_InvalidTokenRendersErrorWithoutCookie(t *testing.T) {
 
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 	body := rec.Body.String()
-	assert.Contains(t, body, "Token inválido")
-	setCookie := rec.Header().Get("Set-Cookie")
-	assert.NotContains(t, setCookie, "wrong-token")
+	assert.Contains(t, body, "Usuario o contraseña inválidos")
+	assert.Empty(t, rec.Header().Get("Set-Cookie"))
+	// No se crea sesión cuando las credenciales fallan.
+	assert.Equal(t, 0, mgr.createCalls)
 }
 
-func TestLogout_ClearsCookieAndRedirects(t *testing.T) {
+func TestLogin_UnknownUserReturns401WithGenericError(t *testing.T) {
 	r := setupWebHandler(newFakeAgentServiceWeb())
 
+	form := url.Values{}
+	form.Set("username", "does-not-exist")
+	form.Set("password", "whatever")
+	req, _ := http.NewRequest(http.MethodPost, "/web/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	// Mismo mensaje genérico que en contraseña incorrecta: no revela cuál falló.
+	assert.Contains(t, rec.Body.String(), "Usuario o contraseña inválidos")
+	assert.Empty(t, rec.Header().Get("Set-Cookie"))
+}
+
+func TestLogout_RevokesServerSession(t *testing.T) {
+	mgr := newFakeWebSessionManager()
+	r := setupWebHandlerWithDeps(newFakeAgentServiceWeb(), fakeWebAuthenticator{okUser: "admin", okPass: "admin123"}, mgr)
+
 	req, _ := http.NewRequest(http.MethodPost, "/web/logout", nil)
+	req.AddCookie(&http.Cookie{Name: "web_auth", Value: validSessionID})
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusSeeOther, rec.Code)
 	assert.Equal(t, "/web/login", rec.Header().Get("Location"))
 
-	setCookie := rec.Header().Get("Set-Cookie")
+	// La sesión se revocó del lado servidor con el ID de la cookie.
+	assert.Equal(t, 1, mgr.revokeCalls)
+	assert.Equal(t, validSessionID, mgr.revokedID)
+
+	// Y la cookie del navegador se expira.
 	parsedCookies := rec.Result().Cookies()
 	require.NotEmpty(t, parsedCookies)
 	cookie := parsedCookies[0]
 	assert.Equal(t, "web_auth", cookie.Name)
 	assert.True(t, cookie.MaxAge < 0 || cookie.Value == "")
+	setCookie := rec.Header().Get("Set-Cookie")
 	assert.Contains(t, setCookie, "web_auth=")
 	assert.Contains(t, setCookie, "SameSite=Strict")
 }
